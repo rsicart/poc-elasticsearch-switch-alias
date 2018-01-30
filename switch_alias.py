@@ -5,83 +5,106 @@ from string import Template
 from elasticsearch import Elasticsearch
 
 class SwitchAlias:
-    def __init__(self, url=None, alias_name=None, index_name=None):
+    def __init__(self):
         self.es_client = Elasticsearch()
-        self.alias_name = alias_name
-        self.index_name_new = index_name
+        self.set_template_update(self.init_template_update())
+        self.alias_name = None
+        self.index_name_new = None
         self.index_name_current = None
-        self.template_update = None
+
+    def set_alias_name(self, alias_name):
+        self.alias_name = alias_name
+
+    def get_alias_name(self):
+        return self.alias_name
+
+    def set_index_name_new(self, index_name_new):
+        self.index_name_new = index_name_new
+
+    def get_index_name_new(self):
+        return self.index_name_new
+
+    def set_index_name_current(self, index_name_current):
+        self.index_name_current = index_name_current
+
+    def get_index_name_current(self):
+        return self.index_name_current
+
+    def set_template_update(self, tpl):
+        self.template_update = tpl
+
+    def get_template_update(self):
+        return self.template_update
+
+
+    def init_template_update(self):
+        return Template('''
+            {
+                "actions" : [
+                    { "remove" : { "index" : "$index_name_current", "alias" : "$alias_name" } },
+                    { "add" : { "index" : "$index_name_new", "alias" : "$alias_name" } }
+                ]
+            }
+            ''')
+
+
+    def get_body_update(self):
+        '''Returns a string with values from self.template_update replaced
+        '''
+        return self.get_template_update().substitute(index_name_current=self.get_index_name_current(),
+                                                    index_name_new=self.get_index_name_new(),
+                                                    alias_name=self.get_alias_name())
 
 
     def fetch_current_index(self):
         '''Get index name where alias_name is currently pointing
         '''
-        if not self.alias_name:
+        if not self.get_alias_name():
             logger.error('Alias %s not specified, please init correctly')
             sys.exit(1)
         # example line: categories twitter   - - -
-        alias_line = self.es_client.cat.aliases(name=self.alias_name)
+        alias_line = self.es_client.cat.aliases(name=self.get_alias_name())
         if not alias_line:
-            logger.error('Alias %s not found', self.alias_name)
+            logger.error('Alias %s not found', self.get_alias_name())
             sys.exit(1)
         alias_list = alias_line.split(" ")
-        self.index_name_current = alias_list[1]
-        logger.debug('Found alias %s on index %s', self.alias_name, self.index_name_current)
+        self.set_index_name_current(alias_list[1])
+        logger.debug('Found alias %s on index %s', self.get_alias_name(), self.get_index_name_current())
 
 
     def update_alias(self):
         '''Update alias current index to new index
         '''
 
-        if not self.alias_name:
+        if not self.get_alias_name():
             logger.error('Alias %s not specified, please init correctly')
             sys.exit(1)
 
-        if not self.index_name_current:
+        if not self.get_index_name_current():
             logger.error('Current index %s not specified, please init correctly')
             sys.exit(1)
 
-        if not self.index_name_new:
+        if not self.get_index_name_new():
             logger.error('New index %s not specified, please init correctly')
             sys.exit(1)
 
-        exists = self.es_client.indices.exists(index=self.index_name_new)
+        exists = self.es_client.indices.exists(index=self.get_index_name_new())
         if not exists:
             logger.error('New index %s does not exits')
             sys.exit(1)
 
         # update
-        update_body = self.get_template().substitute(index_current=self.index_name_current, index_new=self.index_name_new, alias=self.alias_name)
-        self.es_client.indices.update_aliases(body=update_body)
+        self.es_client.indices.update_aliases(body=self.get_body_update())
 
         # alias exists in new index
-        self.es_client.indices.exists_alias(index=self.index_name_new, name=self.alias_name)
-        logger.debug('Successfuly update alias %s, current index %s', self.alias_name, self.index_name_new)
+        self.es_client.indices.exists_alias(index=self.get_index_name_new(), name=self.get_alias_name())
+        logger.debug('Successfuly update alias %s, current index %s', self.get_alias_name(), self.get_index_name_new())
 
-
-    def get_template(self):
-        return Template('''
-            {
-                "actions" : [
-                    { "remove" : { "index" : "$index_current", "alias" : "$alias" } },
-                    { "add" : { "index" : "$index_new", "alias" : "$alias" } }
-                ]
-            }
-            ''')
 
 
 if __name__ == '__main__':
     # args
     parser = argparse.ArgumentParser(description="Run")
-    parser.add_argument('--url', '-u',
-                        required=True,
-                        default=15,
-                        help='Elasticsearch URL, without path')
-    parser.add_argument('--auth', '-a',
-                        help='Enable http basic auth using username:password format')
-    parser.add_argument('--timeout', '-o',
-                        default=15,
-                        help='Http timeout for requests sent to target, in seconds')
     parser.add_argument('--alias', '-l',
                         required=True,
                         help='Alias to switch')
@@ -102,7 +125,9 @@ if __name__ == '__main__':
     logger.addHandler(ch)
 
     # switch alias
-    switch_alias = SwitchAlias(alias_name=cli.alias, index_name=cli.index)
+    switch_alias = SwitchAlias()
+    switch_alias.set_alias_name(cli.alias)
+    switch_alias.set_index_name_new(cli.index)
     switch_alias.fetch_current_index()
     switch_alias.update_alias()
 
