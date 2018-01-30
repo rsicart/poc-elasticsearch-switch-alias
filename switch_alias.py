@@ -38,6 +38,8 @@ class SwitchAlias:
 
 
     def init_template_update(self):
+        '''Initialise self.template_update with a Template to update aliases
+        '''
         return Template('''
             {
                 "actions" : [
@@ -98,7 +100,7 @@ class SwitchAlias:
 
         # alias exists in new index
         self.es_client.indices.exists_alias(index=self.get_index_name_new(), name=self.get_alias_name())
-        logger.debug('Successfuly update alias %s, current index %s', self.get_alias_name(), self.get_index_name_new())
+        logger.debug('Successfuly updated alias %s, current index %s', self.get_alias_name(), self.get_index_name_new())
 
 
 
@@ -113,13 +115,11 @@ if __name__ == '__main__':
                         help='New alias to point to')
     cli = parser.parse_args()
 
-    # logger and loglevel
+    # logger, loglevel, formatter and handler
     logger = logging.getLogger('switch_alias')
     logger.setLevel(logging.DEBUG)
-    # logger handler
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
-    # logger formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
